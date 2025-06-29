@@ -1,0 +1,5 @@
+pandas
+flask
+dotenv
+beartype
+logging

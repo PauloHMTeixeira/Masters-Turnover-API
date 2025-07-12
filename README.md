@@ -5,30 +5,18 @@ Data and ML pipeline as a service to help companies avoid turnover
 
 - [Sobre o Projeto](#sobre-o-projeto)
 - [Objetivos](#objetivos)
-- [Tecnologias Utilizadas](#tecnologias-utilizadas)
 - [Estrutura do Projeto](#estrutura-do-projeto)
 - [Equipe](#equipe)
-- [Como Rodar Localmente](#como-rodar-localmente)
-- [Fluxo de Desenvolvimento](#fluxo-de-desenvolvimento)
-- [Padrões de Código](#padrões-de-código)
 
 ---
 
 ## Sobre o Projeto
-
+Projeto criado para a dissertação do Mestrado Profissional em Engenharia de Software do aluno Paulo Henrique Melo Teixeira.
 
 ---
 
 ## Objetivos
-
-
-
----
-
-## Tecnologias Utilizadas
-
-| Tecnologia | Versão | Observações |
-|------------|--------|-------------|
+Gerar uma pipeline de dados e ML capaz de detectar fatores que mais influenciam a saída de funcionários mulheres de uma empresa de forma automática.
 
 
 ---

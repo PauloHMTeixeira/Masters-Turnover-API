@@ -1,5 +1,3 @@
-import logging
-
 import pandas as pd
 from beartype import beartype
 
@@ -19,15 +17,15 @@ def main(dados: dict):
             disponibilizados.
     """
     path = dados.get("path")
-    numerical_ordinal = dados.get("numerical_ordinal")
-    categorical_ordinal = dados.get("categorical_ordinal")
-    categorical_nom = dados.get("categorical_nom")
+    file_name = dados.get("file_name")
 
     df = pd.read_csv(path)
     response_dict = {}
 
-    response_data = data_pipeline(df)
-    response_ml = ml_pipeline(df, numerical_ordinal, categorical_ordinal, categorical_nom)
+    df_ml = df.copy()
+
+    response_data = data_pipeline(df, file_name)
+    response_ml = ml_pipeline(df_ml, file_name)
 
     response_dict['Data Analysis Path'] = response_data
 

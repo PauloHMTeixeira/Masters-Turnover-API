@@ -6,9 +6,8 @@ from src.validators import validar_entrada
 
 
 app = Flask(__name__)
-app.config.from_pyfile('config.py')
 
-@app.route('/test', methods=['GET'])
+@app.route('/health-check', methods=['GET'])
 def test():
     """
     Função para teste de rota, apenas para verificar se está funcionando.

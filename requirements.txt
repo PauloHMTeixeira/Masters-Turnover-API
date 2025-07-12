@@ -1,5 +1,8 @@
-pandas
-flask
-dotenv
-beartype
-logging
+pandas==2.3.0
+flask==3.1.1
+dotenv==0.9.9
+beartype==0.21.0
+seaborn==0.13.2
+matplotlib==3.10.3
+scikit-learn==1.7.0
+requests==2.32.4

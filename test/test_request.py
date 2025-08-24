@@ -4,7 +4,7 @@ import json
 # URL da sua API
 url = "http://127.0.0.1:5000/processa"
 
-# Exemplo de payload (um único registro, com os mesmos nomes de features esperados pela API)
+# Exemplo de payload
 payload = {
     "path": "data/IBM-HR-Employee-Attrition.csv",
     "file_name": "teste"

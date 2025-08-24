@@ -69,7 +69,7 @@ def data_pipeline(df: pd.DataFrame, file_name: str) -> str:
 def generate_pdf_feature_importance(
         model: RandomForestClassifier,
         feature_names: list[str],
-        pdf_path: str,
+        pdf_path: str
     ) -> str:
     """
     Gera um gráfico das top N importâncias de variáveis de um modelo Random Forest
@@ -104,7 +104,7 @@ def generate_pdf_feature_importance(
     return pdf_path + '_importance.pdf'
 
 @beartype
-def ml_pipeline(df: pd.DataFrame, file_name: str) -> str:
+def ml_pipeline(df: pd.DataFrame, file_name: str, gender: bool = False) -> str:
     """
     Pipeline de modelagem para gerar análise de importância das variáveis.
 
@@ -121,7 +121,7 @@ def ml_pipeline(df: pd.DataFrame, file_name: str) -> str:
     df = pd.get_dummies(df, columns=categorical, drop_first=True)
 
     # Drop de colunas constantes ou quasi-constantes
-    X_temp = df.drop(columns=['Attrition'])
+    X_temp = df.drop(columns=['Attrition', 'EmployeeNumber'])
     selector = VarianceThreshold(threshold=0.01)
     selector.fit(X_temp)
     selected_cols = X_temp.columns[selector.get_support()]
@@ -174,7 +174,10 @@ def ml_pipeline(df: pd.DataFrame, file_name: str) -> str:
 
     logging.info(classification_report(y_test, y_pred))
 
-    # Geração do gráfico de feature importance no PDF
-    pdf_path = generate_pdf_feature_importance(rf, selected_features, file_name)
+    if gender:
+        pdf_path = generate_pdf_feature_importance(rf, selected_features, file_name + '_gender')
+    else:
+        # Geração do gráfico de feature importance no PDF
+        pdf_path = generate_pdf_feature_importance(rf, selected_features, file_name)
 
     return pdf_path

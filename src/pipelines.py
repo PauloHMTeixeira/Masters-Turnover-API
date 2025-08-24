@@ -23,12 +23,16 @@ def main(dados: dict):
     response_dict = {}
 
     df_ml = df.copy()
+    df_ml_gender = df[df['Gender'] == 'Female'].copy()
 
     response_data = data_pipeline(df, file_name)
     response_ml = ml_pipeline(df_ml, file_name)
+    response_ml_gender = ml_pipeline(df_ml_gender, file_name, True)
 
     response_dict['Data Analysis Path'] = response_data
 
     response_dict['Feature Importance Path'] = response_ml
+
+    response_dict['Feature Importance Gender Path'] = response_ml_gender
 
     return response_dict

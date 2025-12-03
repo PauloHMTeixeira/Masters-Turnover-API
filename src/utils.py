@@ -1,3 +1,6 @@
+import matplotlib
+matplotlib.use("Agg")
+
 import pandas as pd
 import logging
 import seaborn as sns

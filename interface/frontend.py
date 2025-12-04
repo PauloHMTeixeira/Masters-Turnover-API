@@ -128,35 +128,21 @@ elif menu == "📤 Processar Arquivo":
     # Mostrar resultados persistidos
     result_paths = st.session_state.get("result_paths")
     if result_paths:
-        st.subheader("📄 Resultados")
-
-        st.write("**PDF de Análise Descritiva:**")
-        st.code(result_paths.get("Data Analysis Path"))
-
-        st.write("**PDF de Importância das Variáveis:**")
-        st.code(result_paths.get("Feature Importance Path"))
+        st.subheader("📄 Relatório Final (Unificado)")
+        st.code(result_paths.get("Final Report"))
 
         try:
-            # PDF 1
-            with open(result_paths.get("Data Analysis Path"), "rb") as f:
-                pdf_data = f.read()
+            with open(result_paths.get("Final Report"), "rb") as f:
+                pdf_final = f.read()
+
             st.download_button(
-                label="📥 Baixar Análise Descritiva",
-                data=pdf_data,
-                file_name=result_paths.get("Data Analysis Path").split("/")[-1],
+                label="📥 Baixar Relatório Completo",
+                data=pdf_final,
+                file_name=result_paths.get("Final Report").split("/")[-1],
                 mime="application/pdf",
             )
-            # PDF 2
-            with open(result_paths.get("Feature Importance Path"), "rb") as f:
-                pdf_data2 = f.read()
-            st.download_button(
-                label="📥 Baixar Feature Importance",
-                data=pdf_data2,
-                file_name=result_paths.get("Feature Importance Path").split("/")[-1],
-                mime="application/pdf",
-            )
-        except:
-            st.warning("PDF gerado, mas não pôde ser carregado para download.")
+        except Exception as e:
+            st.warning(f"Não foi possível carregar o PDF final para download. {e}")
 
 
 

@@ -1,7 +1,13 @@
 import pandas as pd
 from beartype import beartype
+import os
 
-from src.utils import data_pipeline, ml_pipeline
+from src.utils import (
+    data_pipeline,
+    ml_pipeline,
+    generate_cover_pdf,
+    merge_pdfs,
+)
 
 
 @beartype
@@ -21,20 +27,31 @@ def main(dados: dict):
     turnover_col = dados.get("turnover_col")
 
     df = pd.read_csv(path)
-    response_dict = {}
 
+    # Ajuste: criar coluna 'Attrition'
     if turnover_col not in df.columns:
-        raise ValueError(f"A coluna '{turnover_col}' não existe no dataset enviado.")
+        raise ValueError(f"A coluna '{turnover_col}' não existe no dataset.")
 
-    # Criar coluna padrão que a pipeline usa
     df["Attrition"] = df[turnover_col]
 
     df_ml = df.copy()
 
-    response_data = data_pipeline(df, file_name)
-    response_ml = ml_pipeline(df_ml, file_name)
+    # Gera PDFs individuais
+    pdf_data = data_pipeline(df, file_name)
+    pdf_ml = ml_pipeline(df_ml, file_name)
 
-    response_dict['Data Analysis Path'] = response_data
-    response_dict['Feature Importance Path'] = response_ml
+    # Gera capa
+    cover_path = f"{file_name}_COVER.pdf"
+    generate_cover_pdf(cover_path, file_name, turnover_col)
 
-    return response_dict
+    # PDF final
+    final_path = f"{file_name}_RELATORIO_FINAL.pdf"
+
+    merge_pdfs(final_path, [cover_path, pdf_data, pdf_ml])
+
+    return {
+        "Final Report": final_path,
+        "Data Analysis Path": pdf_data,
+        "Feature Importance Path": pdf_ml,
+        "Cover Path": cover_path,
+    }

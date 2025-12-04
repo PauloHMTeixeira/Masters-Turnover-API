@@ -7,3 +7,5 @@ matplotlib==3.10.3
 scikit-learn==1.7.0
 requests==2.32.4
 streamlit
+reportlab
+PyPDF2

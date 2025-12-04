@@ -12,6 +12,10 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import f1_score, classification_report
 from sklearn.feature_selection import VarianceThreshold
 from beartype import beartype
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+from datetime import datetime
+from PyPDF2 import PdfMerger
 
 
 @beartype
@@ -184,3 +188,58 @@ def ml_pipeline(df: pd.DataFrame, file_name: str, gender: bool = False) -> str:
         pdf_path = generate_pdf_feature_importance(rf, selected_features, file_name)
 
     return pdf_path
+
+@beartype
+def generate_cover_pdf(output_path: str, file_name: str, turnover_col: str):
+    """
+    Gera um PDF contendo apenas a capa do relatório final.
+    """
+    c = canvas.Canvas(output_path, pagesize=A4)
+
+    width, height = A4
+    margin = 50
+
+    # Título
+    c.setFont("Helvetica-Bold", 24)
+    c.drawCentredString(width / 2, height - 120, "Relatório de Turnover")
+
+    # Subtítulo
+    c.setFont("Helvetica", 16)
+    c.drawCentredString(width / 2, height - 160, "Análise Exploratória + Importância de Variáveis")
+
+    # Linha divisória
+    c.line(margin, height - 180, width - margin, height - 180)
+
+    # Informações do arquivo
+    c.setFont("Helvetica", 12)
+    c.drawString(margin, height - 220, f"Arquivo analisado: {file_name}.csv")
+    c.drawString(margin, height - 240, f"Coluna de Turnover: {turnover_col}")
+
+    # Data
+    data_atual = datetime.now().strftime("%d/%m/%Y %H:%M")
+    c.drawString(margin, height - 280, f"Data de geração: {data_atual}")
+
+    # Rodapé com GitHub
+    c.setFont("Helvetica-Oblique", 10)
+    c.drawCentredString(width / 2, 50, "Gerado automaticamente pelo Analisador de Turnover")
+    c.drawCentredString(width / 2, 35, "https://github.com/PauloHMTeixeira")
+
+    c.showPage()
+    c.save()
+
+    return output_path
+
+@beartype
+def merge_pdfs(output_path: str, pdf_paths: list):
+    """
+    Junta vários PDFs em um único arquivo final.
+    """
+    merger = PdfMerger()
+
+    for pdf in pdf_paths:
+        merger.append(pdf)
+
+    merger.write(output_path)
+    merger.close()
+
+    return output_path

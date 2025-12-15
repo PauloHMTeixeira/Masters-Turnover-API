@@ -1,191 +1,212 @@
-import matplotlib
-matplotlib.use("Agg")
-
-import pandas as pd
 import logging
-import seaborn as sns
+import numpy as np
+import pandas as pd
+
+import matplotlib
+matplotlib.use("Agg")  # evita erro tkinter em ambiente server/streamlit
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
-from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import f1_score, classification_report
-from sklearn.feature_selection import VarianceThreshold
+
 from beartype import beartype
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from datetime import datetime
 from PyPDF2 import PdfMerger
+from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score, RandomizedSearchCV
+from sklearn.metrics import f1_score, classification_report
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.impute import SimpleImputer
+
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 
 
-@beartype
-def data_pipeline(df: pd.DataFrame, file_name: str) -> str:
+def _build_preprocessor(X: pd.DataFrame) -> ColumnTransformer:
+    num_cols = X.select_dtypes(include=["number"]).columns.tolist()
+    cat_cols = X.select_dtypes(include=["object", "category", "bool"]).columns.tolist()
+
+    numeric_pipe = Pipeline(steps=[
+        ("imputer", SimpleImputer(strategy="median")),
+        ("scaler", StandardScaler()),
+    ])
+
+    categorical_pipe = Pipeline(steps=[
+        ("imputer", SimpleImputer(strategy="most_frequent")),
+        ("onehot", OneHotEncoder(handle_unknown="ignore", sparse_output=False)),
+    ])
+
+    preprocessor = ColumnTransformer(
+        transformers=[
+            ("num", numeric_pipe, num_cols),
+            ("cat", categorical_pipe, cat_cols),
+        ],
+        remainder="drop",
+        verbose_feature_names_out=False,
+    )
+    return preprocessor
+
+
+def _get_feature_names(preprocessor: ColumnTransformer, X: pd.DataFrame) -> list[str]:
+    # Após fit, pega nomes finais (numéricas + onehot)
+    try:
+        return preprocessor.get_feature_names_out().tolist()
+    except Exception:
+        # fallback simples (não deveria ocorrer nas versões recentes)
+        num_cols = X.select_dtypes(include=["number"]).columns.tolist()
+        cat_cols = X.select_dtypes(include=["object", "category", "bool"]).columns.tolist()
+        return num_cols + cat_cols
+
+
+def _extract_importance(best_pipeline: Pipeline, feature_names: list[str]) -> pd.DataFrame:
     """
-    Pipeline de dados para gerar análises estatísticas.
-
-    Args:
-        df (pd.DataFrame): Dataframe recebido como input, de onde vão ser criadas as análises.
-    
-    Returns:
-        path (str): Path para o PDF gerado com as análises.
+    Retorna DF com colunas: feature, importance (sempre em ordem decrescente).
+    Para:
+      - RF/GB: feature_importances_
+      - LogReg: abs(coef_)
     """
-    # Garante coluna padrão/target está no dataframe
-    if 'Attrition' not in df.columns:
-        raise ValueError("A coluna 'Attrition' precisa estar presente no DataFrame.")
+    model = best_pipeline.named_steps["model"]
 
-    # Separa as colunas baseada no tipo
-    numericas = df.select_dtypes(include='number').columns.tolist()
-    categóricas = df.select_dtypes(include=['object', 'category', 'bool']).columns.tolist()
+    if hasattr(model, "feature_importances_"):
+        imp = model.feature_importances_
+    elif hasattr(model, "coef_"):
+        # binário -> coef_ shape (1, n_features)
+        imp = np.abs(model.coef_).ravel()
+    else:
+        # fallback: tudo zero
+        imp = np.zeros(len(feature_names))
 
-    # Remove 'Attrition' das análises
-    if 'Attrition' in numericas:
-        numericas.remove('Attrition')
-    if 'Attrition' in categóricas:
-        categóricas.remove('Attrition')
+    feat_imp_df = pd.DataFrame({"feature": feature_names, "importance": imp})
+    feat_imp_df = feat_imp_df.sort_values("importance", ascending=False)
+    return feat_imp_df
 
-    # Criação do PDF para salvar
-    with PdfPages(f'{file_name}.pdf') as pdf:
 
-        # Gráficos para variáveis numéricas
-        for col in numericas:
-            plt.figure(figsize=(8, 5))
-            sns.kdeplot(data=df, x=col, hue='Attrition', fill=True, common_norm=False)
-            plt.title(f'Distribuição de {col} por Attrition')
-            plt.tight_layout()
-            pdf.savefig()
-            plt.close()
-
-        # Gráficos para variáveis categóricas
-        for col in categóricas:
-            # Ignora colunas com cardinalidade muito alta
-            if df[col].nunique() > 15:
-                continue
-            plt.figure(figsize=(8, 5))
-            sns.countplot(data=df, x=col, hue='Attrition', order=df[col].value_counts().index)
-            plt.title(f'Contagem de {col} por Attrition')
-            plt.xticks(rotation=45)
-            plt.tight_layout()
-            pdf.savefig()
-            plt.close()
-
-    print(f"PDF gerado: {file_name}.pdf")
-
-    return f"{file_name}.pdf"
-
-@beartype
-def generate_pdf_feature_importance(
-        model: RandomForestClassifier,
-        feature_names: list[str],
-        pdf_path: str
-    ) -> str:
-    """
-    Gera um gráfico das top N importâncias de variáveis de um modelo Random Forest
-    e adiciona como uma nova página a um arquivo PDF existente.
-
-    Args:
-        model (RandomForestClassifier): Modelo treinado do qual extrair as importâncias.
-        feature_names (list[str]): Lista com os nomes das features.
-        pdf_path (str): Caminho do arquivo PDF onde o gráfico será salvo (como nova página).
-
-    Returns:
-        str: Caminho do arquivo PDF atualizado.
-    """
-    importances = model.feature_importances_
-
-    feat_imp_df = pd.DataFrame({
-        'feature': feature_names,
-        'importance': importances
-    }).sort_values(by='importance', ascending=False)
-
-    plt.figure(figsize=(10, 6))
-    sns.barplot(data=feat_imp_df, y='feature', x='importance', palette='viridis')
-    plt.title('Importâncias de Variáveis Selecionadas - Random Forest')
-    plt.xlabel('Importância')
-    plt.ylabel('Variável')
+def generate_pdf_feature_importance_from_df(feat_imp_df: pd.DataFrame, pdf_path: str, top_n: int = 25) -> str:
+    df_plot = feat_imp_df.head(top_n).copy()
+    plt.figure(figsize=(10, 7))
+    plt.barh(df_plot["feature"][::-1], df_plot["importance"][::-1])
+    plt.title(f"Top {top_n} Importâncias (modelo selecionado)")
+    plt.xlabel("Importância")
+    plt.ylabel("Variável")
     plt.tight_layout()
 
-    with PdfPages(pdf_path + '_importance.pdf') as pdf:
+    out = pdf_path.replace(".pdf", "") + "_importance.pdf"
+    with PdfPages(out) as pdf:
         pdf.savefig()
         plt.close()
 
-    return pdf_path + '_importance.pdf'
+    return out
+
 
 @beartype
 def ml_pipeline(df: pd.DataFrame, file_name: str, gender: bool = False) -> str:
     """
-    Pipeline de modelagem para gerar análise de importância das variáveis.
-
-    Args:
-        df (pd.DataFrame): Dataframe recebido como input, de onde vai ser criadas a análise.
-    
-    Returns:
-        path (str): Path para o PDF gerado com a análise.
+    Nova versão:
+      1) padroniza split + preprocess
+      2) compara 3 modelos baseline com CV (F1)
+      3) faz hiperparametrização só do melhor
+      4) gera PDF de importâncias do modelo final
     """
-    df['Attrition'] = df['Attrition'].map({'Yes': 1, 'No': 0})
 
-    # Variáveis categóricas
-    categorical = df.select_dtypes(include='object').columns
-    df = pd.get_dummies(df, columns=categorical, drop_first=True)
+    # Target padrão que sua pipeline usa
+    if "Attrition" not in df.columns:
+        raise ValueError("A coluna 'Attrition' precisa estar presente no DataFrame.")
 
-    # Drop de colunas constantes ou quasi-constantes
-    X_temp = df.drop(columns=['Attrition', 'EmployeeNumber'])
-    selector = VarianceThreshold(threshold=0.01)
-    selector.fit(X_temp)
-    selected_cols = X_temp.columns[selector.get_support()]
-    df = df[selected_cols.tolist() + ['Attrition']]
+    # Normaliza target para 0/1 se estiver em Yes/No
+    if df["Attrition"].dtype == object:
+        df["Attrition"] = df["Attrition"].map({"Yes": 1, "No": 0})
 
-    # Separaçãodo target
-    X = df.drop(columns=['Attrition'])
-    y = df['Attrition']
+    # Remove colunas óbvias que não devem entrar
+    drop_cols = [c for c in ["EmployeeNumber"] if c in df.columns]
+    X = df.drop(columns=["Attrition"] + drop_cols)
+    y = df["Attrition"].astype(int)
 
-    X_train, X_test, y_train, y_test = train_test_split(X, y, stratify=y, random_state=42)
+    # Split único (mantém seu padrão)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, stratify=y, random_state=42, test_size=0.25
+    )
 
+    preprocessor = _build_preprocessor(X_train)
 
-    # Seleção de variáveis - Max out
-    selected_features = []
-    remaining_features = list(X_train.columns)
-    best_f1 = 0
-    improvement = True
+    # Modelos baseline (padronizados)
+    candidates = {
+        "logreg": LogisticRegression(max_iter=2000, class_weight="balanced"),
+        "rf": RandomForestClassifier(random_state=42, class_weight="balanced"),
+        "gb": GradientBoostingClassifier(random_state=42),
+    }
 
-    while improvement and remaining_features:
-        improvement = False
-        scores = []
+    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
-        for feature in remaining_features:
-            features_to_test = selected_features + [feature]
-            model = LogisticRegression(max_iter=1000, class_weight='balanced')
-            model.fit(X_train[features_to_test], y_train)
-            preds = model.predict(X_test[features_to_test])
-            score = f1_score(y_test, preds)
-            scores.append((score, feature))
+    # 1) Comparação baseline (mesmo preprocess + mesmo CV + mesma métrica)
+    scores = []
+    for name, model in candidates.items():
+        pipe = Pipeline(steps=[("prep", preprocessor), ("model", model)])
+        cv_scores = cross_val_score(pipe, X_train, y_train, cv=cv, scoring="f1")
+        mean_f1 = float(np.mean(cv_scores))
+        std_f1 = float(np.std(cv_scores))
+        scores.append((mean_f1, std_f1, name))
+        logging.info("Baseline %s | f1=%.4f ± %.4f", name, mean_f1, std_f1)
 
-        scores.sort(reverse=True)
-        top_score, top_feature = scores[0]
+    scores.sort(reverse=True, key=lambda x: x[0])
+    best_name = scores[0][2]
+    logging.info("Melhor baseline: %s", best_name)
 
-        if top_score > best_f1:
-            best_f1 = top_score
-            selected_features.append(top_feature)
-            remaining_features.remove(top_feature)
-            improvement = True
-        else:
-            break
+    # 2) Hiperparametrização só do vencedor
+    base_pipe = Pipeline(steps=[("prep", preprocessor), ("model", candidates[best_name])])
 
-    logging.info("Variáveis selecionadas: %s", selected_features)
+    if best_name == "logreg":
+        param_dist = {
+            "model__C": np.logspace(-3, 2, 25),
+            "model__penalty": ["l2"],
+            "model__solver": ["lbfgs", "liblinear"],
+        }
+    elif best_name == "rf":
+        param_dist = {
+            "model__n_estimators": [200, 400, 600],
+            "model__max_depth": [None, 5, 10, 20],
+            "model__min_samples_split": [2, 5, 10],
+            "model__min_samples_leaf": [1, 2, 4],
+            "model__max_features": ["sqrt", "log2", None],
+        }
+    else:  # gb
+        param_dist = {
+            "model__n_estimators": [100, 200, 300],
+            "model__learning_rate": [0.01, 0.05, 0.1, 0.2],
+            "model__max_depth": [2, 3, 4],
+            "model__subsample": [0.7, 0.85, 1.0],
+        }
 
-    # Modelagem
-    rf = RandomForestClassifier(n_estimators=100, random_state=42, class_weight='balanced')
-    rf.fit(X_train[selected_features], y_train)
+    search = RandomizedSearchCV(
+        estimator=base_pipe,
+        param_distributions=param_dist,
+        n_iter=25,
+        scoring="f1",
+        cv=cv,
+        random_state=42,
+        n_jobs=-1,
+        verbose=0,
+    )
+    search.fit(X_train, y_train)
 
-    # Predição
-    y_pred = rf.predict(X_test[selected_features])
+    best_pipe = search.best_estimator_
+    logging.info("Best params (%s): %s", best_name, search.best_params_)
 
-    logging.info(classification_report(y_test, y_pred))
+    # 3) Avaliação final em hold-out
+    preds = best_pipe.predict(X_test)
+    f1 = f1_score(y_test, preds)
+    logging.info("F1 hold-out: %.4f", f1)
+    logging.info("\n%s", classification_report(y_test, preds))
 
-    if gender:
-        pdf_path = generate_pdf_feature_importance(rf, selected_features, file_name + '_gender')
-    else:
-        # Geração do gráfico de feature importance no PDF
-        pdf_path = generate_pdf_feature_importance(rf, selected_features, file_name)
+    # 4) Feature importance / coef
+    # precisamos “fit” do preprocessor dentro do pipeline já aconteceu no search.fit
+    fitted_prep = best_pipe.named_steps["prep"]
+    feat_names = _get_feature_names(fitted_prep, X_train)
+    feat_imp_df = _extract_importance(best_pipe, feat_names)
+
+    suffix = "_gender" if gender else ""
+    base_pdf = f"{file_name}{suffix}.pdf"  # compatível com seu padrão atual
+    pdf_path = generate_pdf_feature_importance_from_df(feat_imp_df, base_pdf, top_n=25)
 
     return pdf_path
 

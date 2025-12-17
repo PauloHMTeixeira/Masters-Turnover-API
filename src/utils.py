@@ -12,6 +12,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from datetime import datetime
 from PyPDF2 import PdfMerger
+import seaborn as sns
 from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score, RandomizedSearchCV
 from sklearn.metrics import f1_score, classification_report
 from sklearn.pipeline import Pipeline
@@ -98,6 +99,58 @@ def generate_pdf_feature_importance_from_df(feat_imp_df: pd.DataFrame, pdf_path:
 
     return out
 
+def data_pipeline(df: pd.DataFrame, file_name: str) -> str:
+    """
+    Pipeline de dados para gerar análises estatísticas.
+
+    Args:
+        df (pd.DataFrame): Dataframe recebido como input, de onde vão ser criadas as análises.
+    
+    Returns:
+        path (str): Path para o PDF gerado com as análises.
+    """
+    # Garante coluna padrão/target está no dataframe
+    if 'Attrition' not in df.columns:
+        raise ValueError("A coluna 'Attrition' precisa estar presente no DataFrame.")
+
+    # Separa as colunas baseada no tipo
+    numericas = df.select_dtypes(include='number').columns.tolist()
+    categóricas = df.select_dtypes(include=['object', 'category', 'bool']).columns.tolist()
+
+    # Remove 'Attrition' das análises
+    if 'Attrition' in numericas:
+        numericas.remove('Attrition')
+    if 'Attrition' in categóricas:
+        categóricas.remove('Attrition')
+
+    # Criação do PDF para salvar
+    with PdfPages(f'{file_name}.pdf') as pdf:
+
+        # Gráficos para variáveis numéricas
+        for col in numericas:
+            plt.figure(figsize=(8, 5))
+            sns.kdeplot(data=df, x=col, hue='Attrition', fill=True, common_norm=False)
+            plt.title(f'Distribuição de {col} por Attrition')
+            plt.tight_layout()
+            pdf.savefig()
+            plt.close()
+
+        # Gráficos para variáveis categóricas
+        for col in categóricas:
+            # Ignora colunas com cardinalidade muito alta
+            if df[col].nunique() > 15:
+                continue
+            plt.figure(figsize=(8, 5))
+            sns.countplot(data=df, x=col, hue='Attrition', order=df[col].value_counts().index)
+            plt.title(f'Contagem de {col} por Attrition')
+            plt.xticks(rotation=45)
+            plt.tight_layout()
+            pdf.savefig()
+            plt.close()
+
+    print(f"PDF gerado: {file_name}.pdf")
+
+    return f"{file_name}.pdf"
 
 @beartype
 def ml_pipeline(df: pd.DataFrame, file_name: str, gender: bool = False) -> str:
@@ -109,17 +162,14 @@ def ml_pipeline(df: pd.DataFrame, file_name: str, gender: bool = False) -> str:
       4) gera PDF de importâncias do modelo final
     """
 
-    # Target padrão que sua pipeline usa
-    if "Attrition" not in df.columns:
-        raise ValueError("A coluna 'Attrition' precisa estar presente no DataFrame.")
+    df["Attrition"] = pd.to_numeric(df["Attrition"], errors="coerce")
 
-    # Normaliza target para 0/1 se estiver em Yes/No
-    if df["Attrition"].dtype == object:
-        df["Attrition"] = df["Attrition"].map({"Yes": 1, "No": 0})
+    if df["Attrition"].isna().any():
+        raise ValueError(
+            "A coluna 'Attrition' contém valores inválidos após o mapeamento do target."
+        )
 
-    # Remove colunas óbvias que não devem entrar
-    drop_cols = [c for c in ["EmployeeNumber"] if c in df.columns]
-    X = df.drop(columns=["Attrition"] + drop_cols)
+    X = df.drop(columns=["Attrition"])
     y = df["Attrition"].astype(int)
 
     # Split único (mantém seu padrão)
@@ -264,3 +314,63 @@ def merge_pdfs(output_path: str, pdf_paths: list):
     merger.close()
 
     return output_path
+
+def infer_binary_target_mapping(series: pd.Series) -> pd.Series:
+    """
+    Recebe uma Series (target) e devolve uma Series 0/1 robusta.
+    Regras:
+      - aceita Yes/No, True/False, 0/1
+      - para outros 2 rótulos: define o minoritário como 1 (turnover) e o majoritário como 0
+      - se não for binário: levanta ValueError
+    """
+    non_null = series.dropna()
+
+    # Se vazio após dropna
+    if non_null.empty:
+        raise ValueError("A coluna de turnover está vazia (só nulos).")
+
+    # Normaliza para análise de valores
+    if non_null.dtype == object:
+        vals_norm = non_null.astype(str).str.strip()
+    else:
+        vals_norm = non_null
+
+    unique_vals = pd.Series(vals_norm).dropna().unique()
+
+    if len(unique_vals) != 2:
+        raise ValueError(
+            f"A coluna de turnover precisa ser binária (2 valores). "
+            f"Encontrado: {len(unique_vals)} valores únicos (ex.: {unique_vals[:5]})."
+        )
+
+    lower_set = set([str(v).strip().lower() for v in unique_vals])
+
+    # Mapeamentos comuns
+    common_maps = [
+        ({"yes", "no"}, {"yes": 1, "no": 0}),
+        ({"true", "false"}, {"true": 1, "false": 0}),
+        ({"1", "0"}, {"1": 1, "0": 0}),
+    ]
+
+    for keyset, mapping in common_maps:
+        if lower_set == keyset:
+            return series.astype(str).str.strip().str.lower().map(mapping).astype("Int64")
+
+    # Caso genérico: minoritário = 1
+    counts = non_null.value_counts()
+    positive_label = counts.idxmin()
+    return series.map(lambda x: 1 if x == positive_label else 0).astype("Int64")
+
+
+def prepare_attrition_column(df: pd.DataFrame, turnover_col: str) -> pd.DataFrame:
+    """
+    Garante que a coluna 'Attrition' exista no df, como 0/1,
+    a partir da coluna turnover_col escolhida pelo usuário.
+    """
+    if turnover_col not in df.columns:
+        raise ValueError(f"A coluna '{turnover_col}' não existe no dataset enviado.")
+
+    df = df.copy()
+    df["Attrition"] = infer_binary_target_mapping(df[turnover_col])
+    return df
+

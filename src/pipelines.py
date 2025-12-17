@@ -2,9 +2,11 @@ import pandas as pd
 from beartype import beartype
 import os
 
+from src.cleaning import clean_dataset_generic
 from src.utils import (
     data_pipeline,
     ml_pipeline,
+    prepare_attrition_column,
     generate_cover_pdf,
     merge_pdfs,
 )
@@ -13,14 +15,13 @@ from src.utils import (
 @beartype
 def main(dados: dict):
     """
-    Função main onde as pipelines de dados e de Machine Learning vão ser executadas.
+    Executa as pipelines de dados e ML, gera capa e unifica os PDFs em um relatório final.
 
     Args:
-        dados (dict): Dicionário onde estão os dados vindo da requisição.
+        dados (dict): Dicionário com 'path', 'file_name', 'turnover_col'.
 
     Returns:
-        response_dict (dict): Dicionário com os endereços onde os resultado vão ficar 
-            disponibilizados.
+        dict: Paths dos artefatos gerados.
     """
     path = dados.get("path")
     file_name = dados.get("file_name")
@@ -28,25 +29,31 @@ def main(dados: dict):
 
     df = pd.read_csv(path)
 
-    # Ajuste: criar coluna 'Attrition'
-    if turnover_col not in df.columns:
-        raise ValueError(f"A coluna '{turnover_col}' não existe no dataset.")
+    # -----------------------------
+    # PASSO 1 — Target robusto
+    # -----------------------------
+    df = prepare_attrition_column(df, turnover_col)
 
-    df["Attrition"] = df[turnover_col]
+    # -----------------------------
+    # Pipeline de dados (EDA) - mantém df completo
+    # -----------------------------
+    pdf_data = data_pipeline(df.copy(), file_name)
 
-    df_ml = df.copy()
+    # -----------------------------
+    # PASSO 2 — Limpeza universal (para ML)
+    # -----------------------------
+    df_ml, _clean_report = clean_dataset_generic(df.copy(), target_col="Attrition")
 
-    # Gera PDFs individuais
-    pdf_data = data_pipeline(df, file_name)
+    # Pipeline de ML (já deve assumir Attrition 0/1)
     pdf_ml = ml_pipeline(df_ml, file_name)
 
-    # Gera capa
-    cover_path = f"{file_name}_COVER.pdf"
+    # -----------------------------
+    # Capa + Merge (PDF final)
+    # -----------------------------
+    cover_path = os.path.join("data", f"{file_name}_COVER.pdf")
+    final_path = os.path.join("data", f"{file_name}_RELATORIO_FINAL.pdf")
+
     generate_cover_pdf(cover_path, file_name, turnover_col)
-
-    # PDF final
-    final_path = f"{file_name}_RELATORIO_FINAL.pdf"
-
     merge_pdfs(final_path, [cover_path, pdf_data, pdf_ml])
 
     return {

@@ -1,4 +1,5 @@
 import logging
+import os
 import numpy as np
 import pandas as pd
 
@@ -14,7 +15,14 @@ from datetime import datetime
 from PyPDF2 import PdfMerger
 import seaborn as sns
 from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score, RandomizedSearchCV
-from sklearn.metrics import f1_score, classification_report
+from sklearn.metrics import (
+    f1_score,
+    classification_report,
+    ConfusionMatrixDisplay,
+    precision_score,
+    recall_score,
+    confusion_matrix
+)
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
@@ -82,6 +90,90 @@ def _extract_importance(best_pipeline: Pipeline, feature_names: list[str]) -> pd
     feat_imp_df = feat_imp_df.sort_values("importance", ascending=False)
     return feat_imp_df
 
+
+def generate_ml_report_pdf(
+    output_path: str,
+    leaderboard_df: pd.DataFrame,
+    best_model_name: str,
+    holdout_metrics: dict,
+    confusion_matrix,
+    feat_imp_df: pd.DataFrame,
+    top_n: int = 25,
+) -> str:
+    """
+    Gera um PDF com:
+      1) Leaderboard (CV)
+      2) Métricas hold-out + matriz de confusão
+      3) Importância de variáveis do modelo final
+    """
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+
+    with PdfPages(output_path) as pdf:
+
+        # ---------- Página 1: Leaderboard ----------
+        fig, ax = plt.subplots(figsize=(11.7, 8.3))  # A4 landscape-ish
+        ax.axis("off")
+        ax.set_title("Leaderboard de Modelos (Cross-Validation)", fontsize=16, pad=20)
+
+        df_show = leaderboard_df.copy()
+        # Destaque do melhor modelo
+        df_show["Melhor?"] = df_show["model"].apply(lambda x: "✅" if x == best_model_name else "")
+
+        table = ax.table(
+            cellText=df_show.values,
+            colLabels=df_show.columns,
+            loc="center",
+            cellLoc="center",
+        )
+        table.auto_set_font_size(False)
+        table.set_fontsize(11)
+        table.scale(1, 1.6)
+
+        ax.text(
+            0.5, 0.08,
+            "Critério de seleção: F1 médio no CV (maior é melhor).",
+            ha="center", va="center", fontsize=10
+        )
+
+        pdf.savefig(fig)
+        plt.close(fig)
+
+        # ---------- Página 2: Hold-out + Matriz de Confusão ----------
+        fig, ax = plt.subplots(figsize=(11.7, 8.3))
+        ax.axis("off")
+        ax.set_title("Avaliação no Hold-out (Teste)", fontsize=16, pad=20)
+
+        # Texto de métricas
+        metrics_text = (
+            f"Modelo final (tunado): {best_model_name}\n\n"
+            f"F1: {holdout_metrics.get('f1'):.4f}\n"
+            f"Precision: {holdout_metrics.get('precision'):.4f}\n"
+            f"Recall: {holdout_metrics.get('recall'):.4f}\n"
+        )
+        ax.text(0.05, 0.85, metrics_text, fontsize=13, va="top")
+
+        # Matriz de confusão como subplot inserido
+        ax_cm = fig.add_axes([0.55, 0.25, 0.35, 0.5])  # [left, bottom, width, height]
+        disp = ConfusionMatrixDisplay(confusion_matrix=confusion_matrix)
+        disp.plot(ax=ax_cm, colorbar=False)
+        ax_cm.set_title("Matriz de Confusão")
+
+        pdf.savefig(fig)
+        plt.close(fig)
+
+        # ---------- Página 3: Feature Importance ----------
+        df_plot = feat_imp_df.head(top_n).copy()
+        fig, ax = plt.subplots(figsize=(11.7, 8.3))
+        ax.barh(df_plot["feature"][::-1], df_plot["importance"][::-1])
+        ax.set_title(f"Top {top_n} Importâncias (Modelo final)", fontsize=16, pad=20)
+        ax.set_xlabel("Importância")
+        ax.set_ylabel("Variável")
+        plt.tight_layout()
+
+        pdf.savefig(fig)
+        plt.close(fig)
+
+    return output_path
 
 def generate_pdf_feature_importance_from_df(feat_imp_df: pd.DataFrame, pdf_path: str, top_n: int = 25) -> str:
     df_plot = feat_imp_df.head(top_n).copy()
@@ -155,13 +247,47 @@ def data_pipeline(df: pd.DataFrame, file_name: str) -> str:
 @beartype
 def ml_pipeline(df: pd.DataFrame, file_name: str, gender: bool = False) -> str:
     """
-    Nova versão:
-      1) padroniza split + preprocess
-      2) compara 3 modelos baseline com CV (F1)
-      3) faz hiperparametrização só do melhor
-      4) gera PDF de importâncias do modelo final
+    Executes the machine learning pipeline for turnover prediction, including
+    model comparison, hyperparameter optimization, evaluation, and reporting.
+
+    The pipeline performs the following steps:
+    1. Validates and prepares the target variable (`Attrition`) as a binary outcome.
+    2. Splits the dataset into stratified train and test sets.
+    3. Applies a unified preprocessing pipeline for numerical and categorical features.
+    4. Trains and compares multiple baseline models using cross-validation (F1 score).
+    5. Selects the best-performing baseline model.
+    6. Performs hyperparameter optimization only on the selected model.
+    7. Evaluates the tuned model on a hold-out test set.
+    8. Computes performance metrics and feature importance.
+    9. Generates a comprehensive PDF report containing:
+        - Model leaderboard (cross-validation results),
+        - Hold-out evaluation metrics and confusion matrix,
+        - Feature importance of the final model.
+
+    Args:
+        df (pd.DataFrame):
+            Input dataset containing predictor variables and a binary
+            `Attrition` column encoded as 0/1.
+        file_name (str):
+            Base name used to generate output artifacts (PDF reports).
+        gender (bool, optional):
+            Indicates whether the analysis is gender-specific. When True,
+            a suffix is appended to the output file name. Defaults to False.
+
+    Returns:
+        str:
+            File path to the generated machine learning PDF report, which
+            includes the leaderboard, evaluation metrics, and feature importance.
+
+    Raises:
+        ValueError:
+            If the `Attrition` column contains invalid or non-numeric values
+            after preprocessing.
     """
 
+    # -----------------------------
+    # Garantia final do target (0/1)
+    # -----------------------------
     df["Attrition"] = pd.to_numeric(df["Attrition"], errors="coerce")
 
     if df["Attrition"].isna().any():
@@ -172,14 +298,16 @@ def ml_pipeline(df: pd.DataFrame, file_name: str, gender: bool = False) -> str:
     X = df.drop(columns=["Attrition"])
     y = df["Attrition"].astype(int)
 
-    # Split único (mantém seu padrão)
+    # Split único
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, stratify=y, random_state=42, test_size=0.25
     )
 
     preprocessor = _build_preprocessor(X_train)
 
+    # -----------------------------
     # Modelos baseline (padronizados)
+    # -----------------------------
     candidates = {
         "logreg": LogisticRegression(max_iter=2000, class_weight="balanced"),
         "rf": RandomForestClassifier(random_state=42, class_weight="balanced"),
@@ -188,7 +316,7 @@ def ml_pipeline(df: pd.DataFrame, file_name: str, gender: bool = False) -> str:
 
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
-    # 1) Comparação baseline (mesmo preprocess + mesmo CV + mesma métrica)
+    # 1) Comparação baseline (CV)
     scores = []
     for name, model in candidates.items():
         pipe = Pipeline(steps=[("prep", preprocessor), ("model", model)])
@@ -202,7 +330,14 @@ def ml_pipeline(df: pd.DataFrame, file_name: str, gender: bool = False) -> str:
     best_name = scores[0][2]
     logging.info("Melhor baseline: %s", best_name)
 
-    # 2) Hiperparametrização só do vencedor
+    # Leaderboard DF (PASSO 3)
+    leaderboard_df = pd.DataFrame(
+        [{"model": name, "f1_cv_mean": mean, "f1_cv_std": std} for (mean, std, name) in scores]
+    ).sort_values("f1_cv_mean", ascending=False)
+
+    # -----------------------------
+    # 2) Hiperparametrização do vencedor
+    # -----------------------------
     base_pipe = Pipeline(steps=[("prep", preprocessor), ("model", candidates[best_name])])
 
     if best_name == "logreg":
@@ -242,23 +377,47 @@ def ml_pipeline(df: pd.DataFrame, file_name: str, gender: bool = False) -> str:
     best_pipe = search.best_estimator_
     logging.info("Best params (%s): %s", best_name, search.best_params_)
 
-    # 3) Avaliação final em hold-out
+    # -----------------------------
+    # 3) Avaliação final em hold-out (PASSO 3)
+    # -----------------------------
     preds = best_pipe.predict(X_test)
-    f1 = f1_score(y_test, preds)
+
+    f1 = float(f1_score(y_test, preds))
+    prec = float(precision_score(y_test, preds, zero_division=0))
+    rec = float(recall_score(y_test, preds, zero_division=0))
+    cm = confusion_matrix(y_test, preds)
+
+    holdout_metrics = {"f1": f1, "precision": prec, "recall": rec}
+
     logging.info("F1 hold-out: %.4f", f1)
     logging.info("\n%s", classification_report(y_test, preds))
 
+    # -----------------------------
     # 4) Feature importance / coef
-    # precisamos “fit” do preprocessor dentro do pipeline já aconteceu no search.fit
+    # -----------------------------
     fitted_prep = best_pipe.named_steps["prep"]
     feat_names = _get_feature_names(fitted_prep, X_train)
     feat_imp_df = _extract_importance(best_pipe, feat_names)
 
-    suffix = "_gender" if gender else ""
-    base_pdf = f"{file_name}{suffix}.pdf"  # compatível com seu padrão atual
-    pdf_path = generate_pdf_feature_importance_from_df(feat_imp_df, base_pdf, top_n=25)
+    # -----------------------------
+    # 5) Gera PDF de ML completo (Leaderboard + Hold-out + Importance)
+    # -----------------------------
+    os.makedirs("data", exist_ok=True)
 
-    return pdf_path
+    suffix = "_gender" if gender else ""
+    ml_report_path = os.path.join("data", f"{file_name}{suffix}_ML_REPORT.pdf")
+
+    generate_ml_report_pdf(
+        output_path=ml_report_path,
+        leaderboard_df=leaderboard_df,
+        best_model_name=best_name,
+        holdout_metrics=holdout_metrics,
+        confusion_matrix=cm,
+        feat_imp_df=feat_imp_df,
+        top_n=25,
+    )
+
+    return ml_report_path
 
 @beartype
 def generate_cover_pdf(output_path: str, file_name: str, turnover_col: str):

@@ -245,7 +245,7 @@ def data_pipeline(df: pd.DataFrame, file_name: str) -> str:
     return f"{file_name}.pdf"
 
 @beartype
-def ml_pipeline(df: pd.DataFrame, file_name: str, gender: bool = False) -> str:
+def ml_pipeline(df: pd.DataFrame, file_name: str, turnover_col: str) -> str:
     """
     Executes the machine learning pipeline for turnover prediction, including
     model comparison, hyperparameter optimization, evaluation, and reporting.
@@ -288,6 +288,11 @@ def ml_pipeline(df: pd.DataFrame, file_name: str, gender: bool = False) -> str:
     # -----------------------------
     # Garantia final do target (0/1)
     # -----------------------------
+    df["Attrition"] = df[turnover_col]
+
+    if turnover_col != "Attrition":
+        df = df.drop(columns=[turnover_col])
+
     df["Attrition"] = pd.to_numeric(df["Attrition"], errors="coerce")
 
     if df["Attrition"].isna().any():
@@ -404,8 +409,7 @@ def ml_pipeline(df: pd.DataFrame, file_name: str, gender: bool = False) -> str:
     # -----------------------------
     os.makedirs("data", exist_ok=True)
 
-    suffix = "_gender" if gender else ""
-    ml_report_path = os.path.join("data", f"{file_name}{suffix}_ML_REPORT.pdf")
+    ml_report_path = os.path.join("data", f"{file_name}_ML_REPORT.pdf")
 
     generate_ml_report_pdf(
         output_path=ml_report_path,

@@ -42,10 +42,10 @@ def main(dados: dict):
     # -----------------------------
     # PASSO 2 — Limpeza universal (para ML)
     # -----------------------------
-    df_ml, _clean_report = clean_dataset_generic(df.copy(), target_col="Attrition")
+    df_ml, _clean_report = clean_dataset_generic(df.copy(), target_col=turnover_col)
 
     # Pipeline de ML (já deve assumir Attrition 0/1)
-    pdf_ml = ml_pipeline(df_ml, file_name)
+    pdf_ml = ml_pipeline(df_ml, file_name, turnover_col)
 
     # -----------------------------
     # Capa + Merge (PDF final)

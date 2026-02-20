@@ -31,6 +31,8 @@ from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 
+from src.llm_summary import generate_hr_summary
+
 
 def _build_preprocessor(X: pd.DataFrame) -> ColumnTransformer:
     num_cols = X.select_dtypes(include=["number"]).columns.tolist()
@@ -421,7 +423,39 @@ def ml_pipeline(df: pd.DataFrame, file_name: str, turnover_col: str) -> str:
         top_n=25,
     )
 
-    return ml_report_path
+    # -----------------------------
+    # 6) Resumo textual para RH (OpenAI)
+    # -----------------------------
+    hr_summary = None
+    try:
+        # Top variáveis (use o nome real da coluna do seu feat_imp_df)
+        # Ajuste se sua coluna não for "feature"
+        top_features = feat_imp_df["feature"].head(7).astype(str).tolist()
+
+        # Distribuição do target (y está no escopo da função)
+        # Se y for 0/1:
+        counts = y.value_counts(dropna=False).to_dict()
+        class_balance = {"nao": int(counts.get(0, 0)), "sim": int(counts.get(1, 0))}
+
+        # F1 no hold-out: ajuste a chave conforme seu dict holdout_metrics
+        f1_holdout = float(holdout_metrics.get("f1", holdout_metrics.get("f1_score")))
+
+        hr_summary = generate_hr_summary(
+            dataset_label=file_name,
+            target_col_original=turnover_col,  # se quiser: passe o nome original vindo do main
+            n_rows=int(df.shape[0]),
+            n_cols=int(df.shape[1]),
+            class_balance=class_balance,
+            model_selected=str(best_name),
+            f1_holdout=f1_holdout,
+            top_features=top_features,
+            notes="Resumo automático para leitura por profissionais de RH.",
+        )
+    except Exception as e:
+        # Não quebra a execução caso falhe a chamada ao LLM
+        logging.warning("Falha ao gerar resumo para RH via OpenAI: %s", e)
+
+    return ml_report_path, hr_summary
 
 @beartype
 def generate_cover_pdf(output_path: str, file_name: str, turnover_col: str):

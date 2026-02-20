@@ -117,6 +117,9 @@ elif menu == "📤 Processar Arquivo":
                         result = response.json().get("resultado")
                         st.session_state["result_paths"] = result
                         st.success("Pipeline executada com sucesso!")
+                        if result.get("HR Summary"):
+                            st.subheader("Resumo para RH (gerado automaticamente)")
+                            st.write(result["HR Summary"])
 
                     else:
                         st.error(f"Erro da API: {response.text}")

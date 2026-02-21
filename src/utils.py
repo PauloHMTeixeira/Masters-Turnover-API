@@ -247,7 +247,7 @@ def data_pipeline(df: pd.DataFrame, file_name: str) -> str:
     return f"{file_name}.pdf"
 
 @beartype
-def ml_pipeline(df: pd.DataFrame, file_name: str, turnover_col: str) -> str:
+def ml_pipeline(df: pd.DataFrame, file_name: str, turnover_col: str) -> tuple[str, str | None]:
     """
     Executes the machine learning pipeline for turnover prediction, including
     model comparison, hyperparameter optimization, evaluation, and reporting.

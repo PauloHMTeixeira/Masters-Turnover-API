@@ -64,10 +64,13 @@ def main(dados: dict):
             subtitle="Leitura em linguagem simples para apoio à área de Recursos Humanos",
         )
 
-    pdfs_to_merge = [cover_path, pdf_data, pdf_ml]
+    pdfs_to_merge = []
 
+    pdfs_to_merge.append(cover_path)
     if hr_pdf_path:
         pdfs_to_merge.append(hr_pdf_path)
+    pdfs_to_merge.append(pdf_data)
+    pdfs_to_merge.append(pdf_ml)
 
     generate_cover_pdf(cover_path, file_name, turnover_col)
     merge_pdfs(final_path, pdfs_to_merge)

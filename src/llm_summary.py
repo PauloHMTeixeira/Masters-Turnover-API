@@ -67,8 +67,7 @@ Contexto:
 Entregue a resposta com:
 1) Resumo executivo (3–5 linhas)
 2) O que isso sugere (bullets)
-3) Pontos de atenção/limitações (sem causalidade)
-4) Recomendações práticas para investigação (bullets)
+3) Recomendações práticas para investigação (bullets)
 """.strip()
 
     resp = client.responses.create(

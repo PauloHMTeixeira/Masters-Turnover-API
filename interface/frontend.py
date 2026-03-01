@@ -177,16 +177,15 @@ elif menu == "📘 Tutorial":
     - Criar análises exploratórias  
     - Gerar gráficos por categoria e número  
     - Treinar modelo de ML  
-    - Selecionar variáveis  
-    - Criar PDF de **Análise Descritiva**  
-    - Criar PDF de **Importância de Variáveis**  
+    - Executar seleção de variáveis  
+    - Criar PDF com **Análise Descritiva**, **Importância de Variáveis** e **Insights via IA**    
 
     ---
 
     ### 📄 **4. Download dos Resultados**
     Após o processamento:
     - Os caminhos dos arquivos aparecem na tela  
-    - Você pode fazer download direto pelo Streamlit  
+    - Você pode fazer download direto pela interface 
     """)
 
 
@@ -206,7 +205,7 @@ elif menu == "ℹ️ Sobre / Contato":
     [Paulo H. M. Teixeira](https://github.com/PauloHMTeixeira)
 
     Repositório oficial:  
-    👉  [github.com/PauloHMTeixeira](https://github.com/PauloHMTeixeira)
+    👉  [github.com/PauloHMTeixeira](https://github.com/PauloHMTeixeira/Masters-Turnover-API)
 
     **Tecnologias utilizadas:**
     - Python  

@@ -21,15 +21,15 @@ if "result_paths" not in st.session_state:
 # -------------------------------------------------------
 menu = st.sidebar.selectbox(
     "Menu",
-    ["🏠 Início", "📤 Processar Arquivo", "📘 Tutorial", "ℹ️ Sobre / Contato"]
+    ["Início", "Processar Arquivo", "Tutorial", "Sobre / Contato"]
 )
 
 
 # -------------------------------------------------------
 # 1. PÁGINA INICIAL (LANDING PAGE)
 # -------------------------------------------------------
-if menu == "🏠 Início":
-    st.title("📊 Analisador de Turnover")
+if menu == "Início":
+    st.title("Analisador de Turnover")
     st.markdown("""
     Bem-vindo ao **Analisador de Turnover**, uma ferramenta desenvolvida para automatizar:
 
@@ -38,13 +38,13 @@ if menu == "🏠 Início":
     - A geração automática de PDFs profissionais com gráficos e insights  
     
     ---
-    ### 🚀 Como funciona?
-    1. Você sobe um arquivo CSV usando o menu **📤 Processar Arquivo**  
+    ### Como funciona?
+    1. Você sobe um arquivo CSV usando o menu **Processar Arquivo**  
     2. Escolhe qual coluna representa o turnover (ex.: *Attrition*)  
     3. A pipeline roda automaticamente  
     4. PDFs são gerados e disponibilizados para download  
     ---
-    ### 💡 Vantagens
+    ### Vantagens
     - Interface simples e intuitiva  
     - Pipeline completa pronta para reuso  
     - Resultados salvos automaticamente  
@@ -58,9 +58,9 @@ if menu == "🏠 Início":
 # -------------------------------------------------------
 # 2. PROCESSAMENTO DO ARQUIVO
 # -------------------------------------------------------
-elif menu == "📤 Processar Arquivo":
+elif menu == "Processar Arquivo":
 
-    st.title("📤 Processar Arquivo")
+    st.title("Processar Arquivo")
 
     # Upload
     uploaded_file = st.file_uploader(
@@ -93,7 +93,7 @@ elif menu == "📤 Processar Arquivo":
 
     # Processar
     if uploaded_file and turnover_col:
-        if st.button("🚀 Processar Pipeline"):
+        if st.button("Processar Pipeline"):
             with st.spinner("Processando dados e gerando PDFs..."):
 
                 files = {
@@ -131,7 +131,7 @@ elif menu == "📤 Processar Arquivo":
     # Mostrar resultados persistidos
     result_paths = st.session_state.get("result_paths")
     if result_paths:
-        st.subheader("📄 Relatório Final (Unificado)")
+        st.subheader("Relatório Final (Unificado)")
         st.code(result_paths.get("Final Report"))
 
         try:
@@ -139,7 +139,7 @@ elif menu == "📤 Processar Arquivo":
                 pdf_final = f.read()
 
             st.download_button(
-                label="📥 Baixar Relatório Completo",
+                label="Baixar Relatório Completo",
                 data=pdf_final,
                 file_name=result_paths.get("Final Report").split("/")[-1],
                 mime="application/pdf",
@@ -152,27 +152,27 @@ elif menu == "📤 Processar Arquivo":
 # -------------------------------------------------------
 # 3. TUTORIAL
 # -------------------------------------------------------
-elif menu == "📘 Tutorial":
+elif menu == "Tutorial":
 
-    st.title("📘 Tutorial de Uso")
+    st.title("Tutorial de Uso")
 
     st.markdown("""
-    ### 📥 **1. Preparando o arquivo**
+    ### **1. Preparando o arquivo**
     - O arquivo deve estar no formato **CSV**  
     - Deve conter **ao menos uma coluna de turnover** (ex.: Attrition, Saída, Demissão)  
     - Deve conter tanto colunas numéricas quanto categóricas  
 
     ---
 
-    ### 📤 **2. Enviando o arquivo**
-    Vá até o menu **📤 Processar Arquivo** e:
+    ### **2. Enviando o arquivo**
+    Vá até o menu **Processar Arquivo** e:
     1. Arraste o arquivo para a área de upload  
     2. Confira a prévia do dataset  
     3. Selecione a coluna de turnover no dropdown  
 
     ---
 
-    ### ⚙️ **3. Execução da Pipeline**
+    ### **3. Execução da Pipeline**
     A pipeline irá:
     - Criar análises exploratórias  
     - Gerar gráficos por categoria e número  
@@ -182,7 +182,7 @@ elif menu == "📘 Tutorial":
 
     ---
 
-    ### 📄 **4. Download dos Resultados**
+    ### **4. Download dos Resultados**
     Após o processamento:
     - Os caminhos dos arquivos aparecem na tela  
     - Você pode fazer download direto pela interface 
@@ -193,9 +193,9 @@ elif menu == "📘 Tutorial":
 # -------------------------------------------------------
 # 4. SOBRE / CONTATO
 # -------------------------------------------------------
-elif menu == "ℹ️ Sobre / Contato":
+elif menu == "Sobre / Contato":
 
-    st.title("ℹ️ Sobre o Projeto")
+    st.title("Sobre o Projeto")
 
     st.markdown("""
     Este projeto faz parte da iniciativa para automatizar análises de **turnover voluntário** 
@@ -205,7 +205,7 @@ elif menu == "ℹ️ Sobre / Contato":
     [Paulo H. M. Teixeira](https://github.com/PauloHMTeixeira)
 
     Repositório oficial:  
-    👉  [github.com/PauloHMTeixeira](https://github.com/PauloHMTeixeira/Masters-Turnover-API)
+    [github.com/PauloHMTeixeira](https://github.com/PauloHMTeixeira/Masters-Turnover-API)
 
     **Tecnologias utilizadas:**
     - Python  
